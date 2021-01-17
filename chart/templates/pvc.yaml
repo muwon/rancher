@@ -17,3 +17,23 @@ spec:
         {{- end -}}
     {{- end }}
 {{- end }}
+{{- if not .Values.auditLog.usePVC }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ template "rancher.fullname" . }}-auditlog
+spec:
+  accessModes:
+    - {{ .Values.auditLog.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.auditLog.size | quote }}
+  storageClassName: {{ if .Values.auditLog.storageClass }}
+        {{- if (eq "-" .Values.auditLog.storageClass) -}}
+            ""
+        {{- else }}
+            {{- .Values.auditLog.storageClass }}
+        {{- end -}}
+    {{- end }}
+{{- end }}

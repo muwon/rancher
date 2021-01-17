@@ -1,5 +1,5 @@
-{{- if not .Values.auditLog.usePVC }}
-kind: Deployment
+{{- if .Values.auditLog.usePVC }}
+kind: StatefulSet
 apiVersion: apps/v1
 metadata:
   name: {{ template "rancher.fullname" . }}
@@ -9,14 +9,12 @@ metadata:
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
 spec:
+  serviceName: {{ template "rancher.fullname" . }}
   replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
       app: {{ template "rancher.fullname" . }}
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 1
+  updateStrategy:
     type: RollingUpdate
   template:
     metadata:
@@ -155,7 +153,7 @@ spec:
 {{- end }}
 {{- if gt (int .Values.auditLog.level) 0 }}
         - mountPath: /var/log/auditlog
-          name: audit-log
+          name: {{ template "rancher.fullname" . }}-auditlog
 {{- end }}
 {{- if gt (int .Values.auditLog.level) 0 }}
       # Make audit logs available for Rancher log collector tools.
@@ -166,7 +164,7 @@ spec:
         args: ["-F", "/var/log/auditlog/rancher-api-audit.log"]
         volumeMounts:
         - mountPath: /var/log/auditlog
-          name: audit-log
+          name: {{ template "rancher.fullname" . }}-auditlog
 {{- end }}
       volumes:
 {{- if .Values.additionalTrustedCAs }}
@@ -181,29 +179,35 @@ spec:
           defaultMode: 0400
           secretName: tls-ca
 {{- end }}
-{{- if gt (int .Values.auditLog.level) 0 }}
-      - name: audit-log
-  {{- if .Values.auditLog.usePVC }}
-        persistentVolumeClaim:
-          claimName: {{ .Values.auditLog.volumeName | default (printf "%s-auditlog" (include "rancher.fullname" .)) }}
-  {{- else }}
-    {{- if eq .Values.auditLog.destination "hostPath" }}
-        hostPath:
-          path: {{ .Values.auditLog.hostPath }}
-          type: DirectoryOrCreate
-    {{- else }}
-        emptyDir: {}
-    {{- end }}
-  {{- end }}
-{{- end }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ template "rancher.fullname" . }}-auditlog
+    spec:
+      storageClassName: {{ if .Values.auditLog.storageClass }}
+            {{- if (eq "-" .Values.auditLog.storageClass) -}}
+                ""
+            {{- else }}
+                {{- .Values.auditLog.storageClass }}
+            {{- end -}}
+        {{- end }}
+      accessModes: [ {{ .Values.auditLog.accessMode|quote }} ]
+      resources:
+        requests:
+          storage: {{ .Values.auditLog.size }}
 {{- if and .Values.customLogos.enabled (or (eq .Values.customLogos.volumeKind "persistentVolumeClaim") (and (eq .Values.customLogos.volumeKind "configMap") (.Values.customLogos.volumeName))) }}
-      - name: custom-logos
-  {{- if (eq .Values.customLogos.volumeKind "persistentVolumeClaim") }}
-        persistentVolumeClaim:
-          claimName: {{ .Values.customLogos.volumeName | default (printf "%s-custom-logos" (include "rancher.fullname" .)) }}
-  {{- else if (eq .Values.customLogos.volumeKind "configMap") }}
-        configMap:
-          name: {{ .Values.customLogos.volumeName }}
-  {{- end }}
+  - metadata:
+      name: {{ template "rancher.fullname" . }}-custom-logos
+    spec:
+      storageClassName: {{ if .Values.customLogos.storageClass }}
+            {{- if (eq "-" .Values.customLogos.storageClass) -}}
+                ""
+            {{- else }}
+                {{- .Values.customLogos.storageClass }}
+            {{- end -}}
+        {{- end }}
+      accessModes: [ {{ .Values.customLogos.accessMode|quote }} ]
+      resources:
+        requests:
+          storage: {{ .Values.customLogos.size }}
 {{- end }}
 {{- end }}
